@@ -7,8 +7,6 @@ import routes from "./routes/index.js";
 import { rateLimiter } from "./middlewares/rateLimiter.js";
 import { errorHandler } from "./middlewares/errorHandler.js";
 import { notFound } from "./middlewares/notFound.js";
-import z from "zod/v4";
-import { validateBody } from "./middlewares/validate.js";
 
 const app = express();
 
@@ -31,18 +29,6 @@ app.get("/health", (req, res) => {
 
 app.use("/api/v1", routes);
 // app.use("/api/v2", routes);
-
-const testSchema = z.object({
-  name: z.string().min(2),
-  age: z.number().int().positive(),
-});
-
-app.post("/test-validation", validateBody(testSchema), (req, res) => {
-  res.json({
-    success: true,
-    data: req.body,
-  });
-});
 
 app.use(notFound);
 
