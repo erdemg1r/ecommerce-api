@@ -12,51 +12,52 @@ import {
   tagIdsSchema,
 } from "../schemas/productSchemas.js";
 import { idParamSchema } from "../schemas/commonSchemas.js";
+import { authenticate } from "../middlewares/authenticate.js";
 
 const router: ExpressRouter = Router();
 
 // 1. Statik koleksiyon route'ları (dinamik /:id'den ÖNCE gelmeli)
 router.get("/", validateQuery(productQuerySchema), productController.getAll);
-router.get("/deleted", productController.getDeleted);
+router.get("/deleted", authenticate, productController.getDeleted);
 
 // 2. Kaynak yaratma
-router.post("/", validateBody(createProductSchema), productController.create);
+router.post("/", authenticate, validateBody(createProductSchema), productController.create);
 
 // 3. Dinamik route'lar (parametreli)
 router.get("/:id", validateParams(idParamSchema), productController.getById);
 
 router.put(
-  "/:id",
+  "/:id", authenticate,
   validateParams(idParamSchema),
   validateBody(updateProductSchema),
   productController.update,
 );
 
-router.delete("/:id", validateParams(idParamSchema), productController.remove);
+router.delete("/:id", authenticate, validateParams(idParamSchema), productController.remove);
 
 router.patch(
-  "/:id/restore",
+  "/:id/restore", authenticate,
   validateParams(idParamSchema),
   productController.restore,
 );
 
 // 4. Alt kaynak route'ları (tag işlemleri)
 router.post(
-  "/:id/tags",
+  "/:id/tags", authenticate,
   validateParams(idParamSchema),
   validateBody(tagIdsSchema),
   productController.addTags,
 );
 
 router.delete(
-  "/:id/tags",
+  "/:id/tags", authenticate,
   validateParams(idParamSchema),
   validateBody(tagIdsSchema),
   productController.removeTags,
 );
 
 router.put(
-  "/:id/tags",
+  "/:id/tags", authenticate,
   validateParams(idParamSchema),
   validateBody(tagIdsSchema),
   productController.setTags,

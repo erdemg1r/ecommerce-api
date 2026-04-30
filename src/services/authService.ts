@@ -1,6 +1,10 @@
+import jwt from "jsonwebtoken";
 import { prisma } from "../config/database.js";
+import type { Role } from "../generated/prisma/client.js";
 import type { LoginInput, RegisterInput } from "../schemas/authSchemas.js";
+import type { RefreshTokenPayload, SessionContext } from "../types/authTypes.js";
 import { ConflictError, UnauthorizedError } from "../utils/errors.js";
+import { hashToken, safeVerifyRefreshToken, signAccessToken, signRefreshToken, verifyRefreshToken } from "../utils/jwt.js";
 import {
   comparePassword,
   DUMMY_HASH,
@@ -9,6 +13,38 @@ import {
 import crypto from "node:crypto";
 
 const VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; //24 saat
+const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; //7 gün
+
+
+const issueTokens = async (user: { id: string, role: Role }, session: SessionContext) => {
+  const create = await prisma.refreshToken.create({
+    data: {
+      token: crypto.randomBytes(16).toString("hex"),
+      userId: user.id,
+      expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
+      userAgent: session.userAgent ?? null,
+      ipAddress: session.ipAddress ?? null,
+    }
+  })
+
+
+  const accessToken = signAccessToken({ userId: user.id, role: user.role })
+  const refreshTokenJWT = signRefreshToken({ userId: user.id, tokenId: create.id })
+
+  await prisma.refreshToken.update({
+    where: {
+      id: create.id
+    },
+    data: {
+      token: hashToken(refreshTokenJWT)
+    }
+  })
+  return {
+    accessToken,
+    refreshToken: refreshTokenJWT
+  }
+}
+
 
 export const authService = {
   register: async (input: RegisterInput) => {
@@ -86,7 +122,7 @@ export const authService = {
     return { verified: true };
   },
 
-  login: async (input: LoginInput) => {
+  login: async (input: LoginInput, session: SessionContext) => {
     const user = await prisma.user.findUnique({
       where: { email: input.email },
     });
@@ -112,11 +148,131 @@ export const authService = {
       );
     }
 
+    const tokens = await issueTokens({ id: user.id, role: user.role }, session)
+
+
+
     return {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      },
+      ...tokens,
     };
   },
+
+  refresh: async (rawToken: string, session: SessionContext) => {
+    let payload: RefreshTokenPayload
+    try {
+      payload = verifyRefreshToken(rawToken)
+    } catch (error) {
+      if (error instanceof jwt.TokenExpiredError) {
+        throw new UnauthorizedError("Oturum süresi dolmuş. Lütfen tekrar giriş yapın")
+      }
+      throw new UnauthorizedError("Geçersiz refresh token")
+    }
+
+    const stored = await prisma.refreshToken.findUnique({
+      where: { id: payload.tokenId },
+    })
+
+    if (!stored) throw new UnauthorizedError("Geçersiz refresh token")
+
+    if (stored.token !== hashToken(rawToken)) {
+      throw new UnauthorizedError("Geçersiz refresh token")
+    }
+
+    if (stored.expiresAt < new Date()) {
+      throw new UnauthorizedError("Refresh token süresi dolmuş")
+    }
+
+    if (stored.revokedAt) {
+      await prisma.refreshToken.updateMany({
+        where: { userId: payload.userId, revokedAt: null },
+        data: { revokedAt: new Date() }
+      })
+
+      throw new UnauthorizedError("Oturum güvenliği ihlali. Tüm oturumlarınız sonlandırıldı")
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId },
+    })
+
+    if (!user || user.deletedAt || !user.isActive) {
+      throw new UnauthorizedError("Hesap geçersiz veya silinmiş")
+    }
+
+    const tokens = await issueTokens({ id: user.id, role: user.role }, session)
+
+    const newPayload = verifyRefreshToken(tokens.refreshToken)
+
+    await prisma.refreshToken.update({
+      where: { id: stored.id },
+      data: { revokedAt: new Date(), replacedBy: newPayload.tokenId }
+    })
+
+    return tokens
+
+  },
+
+  logout: async (rawRefreshToken?: string) => {
+    if (!rawRefreshToken) return;
+    const payload = safeVerifyRefreshToken(rawRefreshToken)
+    if (!payload) return;
+
+    await prisma.refreshToken.updateMany({
+      where: { id: payload.tokenId, revokedAt: null },
+      data: {
+        revokedAt: new Date()
+      }
+    })
+  },
+
+  logoutAll: async (userId: string) => {
+    await prisma.refreshToken.updateMany({
+      where: { userId, revokedAt: null },
+      data: {
+        revokedAt: new Date()
+      }
+    })
+  },
+
+  me: async (userId: string) => {
+    const user = await prisma.user.findFirst({
+      where: { id: userId, deletedAt: null },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        isActive: true,
+        isVerified: true,
+        createdAt: true,
+      }
+    })
+
+    if (!user) throw new UnauthorizedError("Hesap Bulunamadı")
+    return user
+  },
+
+  listSession: async (userId: string) => {
+    return prisma.refreshToken.findMany({
+      where: {
+        userId,
+        revokedAt: null,
+        expiresAt: { gt: new Date() }
+      },
+      select: {
+        id: true,
+        userAgent: true,
+        ipAddress: true,
+        createdAt: true,
+        expiresAt: true
+      },
+      orderBy: { createdAt: "desc" }
+    })
+  }
 };

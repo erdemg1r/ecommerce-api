@@ -1,9 +1,16 @@
+import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient, Role } from "../src/generated/prisma/client.js"
-import { env } from "../src/config/env.js";
+import { hashPassword } from "../src/utils/password.js";
+
+const databaseUrl = process.env.DATABASE_URL;
+
+if (!databaseUrl) {
+  throw new Error("DATABASE_URL zorunludur");
+}
 
 const adapter = new PrismaPg({
-  connectionString: env.DATABASE_URL!,
+  connectionString: databaseUrl,
 });
 const prisma = new PrismaClient({ adapter });
 
@@ -264,36 +271,67 @@ async function main() {
   // ═══════════════════════════════════════
   console.log("👤 Test kullanıcıları oluşturuluyor...");
 
+  const adminPassword = await hashPassword("Admin123");
+  const producerPassword = await hashPassword("Producer123");
+  const customerPassword = await hashPassword("Customer123");
+
   await prisma.user.upsert({
     where: { email: "admin@ecommerce.com" },
-    update: {},
+    update: {
+      name: "Admin User",
+      password: adminPassword,
+      role: Role.ADMIN,
+      isActive: true,
+      isVerified: true,
+      verificationToken: null,
+      verificationTokenExpiry: null,
+    },
     create: {
       email: "admin@ecommerce.com",
       name: "Admin User",
-      password: "admin123", // Modül 5'te hash'lenecek!
+      password: adminPassword,
       role: Role.ADMIN,
+      isVerified: true,
     },
   });
 
   await prisma.user.upsert({
     where: { email: "producer@ecommerce.com" },
-    update: {},
+    update: {
+      name: "Üretici Ali",
+      password: producerPassword,
+      role: Role.PRODUCER,
+      isActive: true,
+      isVerified: true,
+      verificationToken: null,
+      verificationTokenExpiry: null,
+    },
     create: {
       email: "producer@ecommerce.com",
       name: "Üretici Ali",
-      password: "producer123",
+      password: producerPassword,
       role: Role.PRODUCER,
+      isVerified: true,
     },
   });
 
   await prisma.user.upsert({
     where: { email: "customer@ecommerce.com" },
-    update: {},
+    update: {
+      name: "Müşteri Ayşe",
+      password: customerPassword,
+      role: Role.CUSTOMER,
+      isActive: true,
+      isVerified: true,
+      verificationToken: null,
+      verificationTokenExpiry: null,
+    },
     create: {
       email: "customer@ecommerce.com",
       name: "Müşteri Ayşe",
-      password: "customer123",
+      password: customerPassword,
       role: Role.CUSTOMER,
+      isVerified: true,
     },
   });
 

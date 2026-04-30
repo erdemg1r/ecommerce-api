@@ -7,6 +7,7 @@ import routes from "./routes/index.js";
 import { rateLimiter } from "./middlewares/rateLimiter.js";
 import { errorHandler } from "./middlewares/errorHandler.js";
 import { notFound } from "./middlewares/notFound.js";
+import cookieParser from "cookie-parser";
 
 const app = express();
 
@@ -14,11 +15,13 @@ app.use(helmet()); //! 1. Sıra Güvenlik
 
 app.use(cors()); //! 2. Sıra Cors
 
+app.use(cookieParser()) //! 4. Cookie Parser
 app.use(express.json()); //! 3. Sıra Body Parsing
 
-app.use(rateLimiter); //! 4. Sıra Rate Limiting
 
-app.use(requestLogger); //! 5. Request Logging
+app.use(rateLimiter); //! 5. Sıra Rate Limiting
+
+app.use(requestLogger); //! 6. Request Logging
 
 app.get("/health", (req, res) => {
   res.json({
