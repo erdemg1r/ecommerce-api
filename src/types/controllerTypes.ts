@@ -21,8 +21,11 @@ export interface AuthController {
   verifyEmail: RequestHandler;
   login: RequestHandler,
   refresh: RequestHandler,
-  logout:RequestHandler,
-  logoutAll:RequestHandler,
-  me:RequestHandler,
-  session:RequestHandler,
+  logout: RequestHandler,
+  logoutAll: RequestHandler,
+  me: RequestHandler,
+  session: RequestHandler,
+  forgotPassword: RequestHandler,
+  resetPassword: RequestHandler,
+  resendVerification: RequestHandler,
 }

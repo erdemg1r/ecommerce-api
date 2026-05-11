@@ -4,3 +4,5 @@ dist/
 *.log
 
 /src/generated/prisma
+
+ders_ecommerce-api/

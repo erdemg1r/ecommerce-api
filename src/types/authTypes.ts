@@ -17,3 +17,9 @@ export interface SessionContext {
     ipAddress?: string | undefined;
 }
 
+export interface MailOptions {
+    to: string;
+    subject:string;
+    html: string;
+    text?: string
+}

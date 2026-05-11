@@ -2,7 +2,7 @@ import type { Response, Request } from "express";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { authService } from "../services/authService.js";
 import { sendSuccess } from "../utils/response.js";
-import type { VerifyEmailInput } from "../schemas/authSchemas.js";
+import type { ResendVerificationInput, VerifyEmailInput } from "../schemas/authSchemas.js";
 import type { AuthController } from "../types/controllerTypes.js";
 import { clearRefreshCookie, COOKIE_NAME, setRefreshCookie } from "../utils/cookies.js";
 import { UnauthorizedError } from "../utils/errors.js";
@@ -72,6 +72,20 @@ const session = asyncHandler(async (req: Request, res: Response) => {
   sendSuccess(res, { session: list })
 })
 
+const forgotPassword = asyncHandler(async (req: Request, res: Response) => {
+  sendSuccess(res, await authService.forgotPassword(req.body))
+})
+
+const resetPassword = asyncHandler(async (req: Request, res: Response) => {
+  sendSuccess(res, await authService.resetPassword(req.body))
+})
+
+const resendVerification = asyncHandler(async (req: Request, res: Response) => {
+  const { email } = req.body as ResendVerificationInput;
+  const result = await authService.resendVerification(email);
+  sendSuccess(res, result);
+});
+
 export const authController: AuthController = {
   register,
   verifyEmail,
@@ -80,5 +94,8 @@ export const authController: AuthController = {
   logout,
   logoutAll,
   me,
-  session
+  session,
+  forgotPassword,
+  resetPassword,
+  resendVerification
 }

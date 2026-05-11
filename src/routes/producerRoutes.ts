@@ -7,30 +7,31 @@ import {
 } from "../schemas/producerSchemas.js";
 import { idParamSchema } from "../schemas/commonSchemas.js";
 import { authenticate } from "../middlewares/authenticate.js";
+import { authorize } from "../middlewares/authorize.js";
 
 const router: ExpressRouter = Router();
 
 // 1. Statik koleksiyon route'ları
 router.get("/", producerController.getAll);
-router.get("/deleted", authenticate, producerController.getDeleted);
+router.get("/deleted", authenticate, authorize("ADMIN"), producerController.getDeleted);
 
 // 2. Kaynak yaratma
-router.post("/",authenticate, validateBody(createProducerSchema), producerController.create);
+router.post("/",authenticate, authorize("ADMIN"), validateBody(createProducerSchema), producerController.create);
 
 // 3. Dinamik route'lar
 router.get("/:id", validateParams(idParamSchema), producerController.getById);
 
 router.put(
-  "/:id",authenticate,
+  "/:id",authenticate, authorize("ADMIN"),
   validateParams(idParamSchema),
   validateBody(updateProducerSchema),
   producerController.update,
 );
 
-router.delete("/:id",authenticate, validateParams(idParamSchema), producerController.remove);
+router.delete("/:id",authenticate, authorize("ADMIN"), validateParams(idParamSchema), producerController.remove);
 
 router.patch(
-  "/:id/restore",authenticate,
+  "/:id/restore",authenticate, authorize("ADMIN"),
   validateParams(idParamSchema),
   producerController.restore,
 );

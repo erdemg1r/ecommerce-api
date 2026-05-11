@@ -13,51 +13,52 @@ import {
 } from "../schemas/productSchemas.js";
 import { idParamSchema } from "../schemas/commonSchemas.js";
 import { authenticate } from "../middlewares/authenticate.js";
+import { authorize } from "../middlewares/authorize.js";
 
 const router: ExpressRouter = Router();
 
 // 1. Statik koleksiyon route'ları (dinamik /:id'den ÖNCE gelmeli)
 router.get("/", validateQuery(productQuerySchema), productController.getAll);
-router.get("/deleted", authenticate, productController.getDeleted);
+router.get("/deleted", authenticate, authorize("ADMIN"), productController.getDeleted);
 
 // 2. Kaynak yaratma
-router.post("/", authenticate, validateBody(createProductSchema), productController.create);
+router.post("/", authenticate, authorize("ADMIN"), validateBody(createProductSchema), productController.create);
 
 // 3. Dinamik route'lar (parametreli)
 router.get("/:id", validateParams(idParamSchema), productController.getById);
 
 router.put(
-  "/:id", authenticate,
+  "/:id", authenticate, authorize("ADMIN", "PRODUCER"),
   validateParams(idParamSchema),
   validateBody(updateProductSchema),
   productController.update,
 );
 
-router.delete("/:id", authenticate, validateParams(idParamSchema), productController.remove);
+router.delete("/:id", authenticate, authorize("ADMIN", "PRODUCER"), validateParams(idParamSchema), productController.remove);
 
 router.patch(
-  "/:id/restore", authenticate,
+  "/:id/restore", authenticate, authorize("ADMIN"),
   validateParams(idParamSchema),
   productController.restore,
 );
 
 // 4. Alt kaynak route'ları (tag işlemleri)
 router.post(
-  "/:id/tags", authenticate,
+  "/:id/tags", authenticate, authorize("ADMIN", "PRODUCER"),
   validateParams(idParamSchema),
   validateBody(tagIdsSchema),
   productController.addTags,
 );
 
 router.delete(
-  "/:id/tags", authenticate,
+  "/:id/tags", authenticate, authorize("ADMIN", "PRODUCER"),
   validateParams(idParamSchema),
   validateBody(tagIdsSchema),
   productController.removeTags,
 );
 
 router.put(
-  "/:id/tags", authenticate,
+  "/:id/tags", authenticate, authorize("ADMIN", "PRODUCER"),
   validateParams(idParamSchema),
   validateBody(tagIdsSchema),
   productController.setTags,

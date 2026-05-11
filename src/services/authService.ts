@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
 import { prisma } from "../config/database.js";
 import type { Role } from "../generated/prisma/client.js";
-import type { LoginInput, RegisterInput } from "../schemas/authSchemas.js";
+import type { ForgotPasswordInput, LoginInput, RegisterInput, ResetPasswordInput } from "../schemas/authSchemas.js";
 import type { RefreshTokenPayload, SessionContext } from "../types/authTypes.js";
 import { ConflictError, UnauthorizedError } from "../utils/errors.js";
 import { hashToken, safeVerifyRefreshToken, signAccessToken, signRefreshToken, verifyRefreshToken } from "../utils/jwt.js";
@@ -11,6 +11,8 @@ import {
   hashPassword,
 } from "../utils/password.js";
 import crypto from "node:crypto";
+import { safeSendEmail } from "../utils/mailer.js";
+import { resetPasswordTemplate, verifyEmailTemplate } from "../utils/emailTemplates.js";
 
 const VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; //24 saat
 const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; //7 gün
@@ -84,12 +86,11 @@ export const authService = {
       },
     });
 
-    // email verificationURL 36.gün
-
-    const verificationUrl = `/verify-email?token=${rawToken}`;
-    console.log(`📧 To: ${user.email}`);
-    console.log(`📧 URL: ${verificationUrl}`);
-    console.log(`📧 Token: ${rawToken}`);
+    await safeSendEmail({
+      to: user.email,
+      subject: "Email Adresini Doğrula",
+      html: verifyEmailTemplate(rawToken)
+    })
 
     return user;
   },
@@ -274,5 +275,92 @@ export const authService = {
       },
       orderBy: { createdAt: "desc" }
     })
+  },
+
+  forgotPassword: async (input: ForgotPasswordInput) => {
+    const user = await prisma.user.findUnique({
+      where: {
+        email: input.email
+      }
+    })
+
+    if (user && user.isActive && !user.deletedAt) {
+      const rawToken = crypto.randomBytes(32).toString("hex")
+      const hashedToken = crypto.createHash("sha256").update(rawToken).digest("hex")
+
+      await prisma.user.update({
+        where: {
+          id: user.id
+        },
+        data: {
+          resetToken: hashedToken,
+          resetTokenExpiry: new Date(Date.now() + 60 * 60 * 1000)
+        }
+      })
+
+      await safeSendEmail({
+        to: user.email,
+        subject: "Şifre Sıfırlama",
+        html: resetPasswordTemplate(rawToken)
+      })
+    }
+    return { message: " Sıfırlama Maili gönderildi." }
+  },
+
+  resetPassword: async (input: ResetPasswordInput) => {
+    const hashedToken = crypto.createHash("sha256").update(input.token).digest("hex")
+
+    const user = await prisma.user.findFirst({
+      where: {
+        resetToken: hashedToken,
+        resetTokenExpiry: { gt: new Date() }
+      }
+    })
+
+    if (!user) throw new UnauthorizedError("Geçersiz veya süresi dolmuş token")
+
+    const hashedPassword = await hashPassword(input.password)
+
+    await prisma.$transaction([
+      prisma.user.update({
+        where: {
+          id: user.id
+        },
+        data: {
+          password: hashedPassword,
+          resetToken: null,
+          resetTokenExpiry: null
+        }
+      }),
+      prisma.refreshToken.updateMany({
+        where: { userId: user.id, revokedAt: null },
+        data: { revokedAt: new Date() }
+      })
+    ])
+
+    return { message: "Şifre başarıyla sıfırlandı, Lütfen yeniden giriş yapın" }
+  },
+
+  resendVerification: async (email: string) => {
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (user && !user.isVerified && !user.deletedAt) {
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    const hashedToken = crypto.createHash("sha256").update(rawToken).digest("hex");
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        verificationToken: hashedToken,
+        verificationTokenExpiry: new Date(Date.now() + VERIFICATION_TOKEN_TTL_MS),
+      },
+    });
+
+    await safeSendEmail({
+      to: user.email,
+      subject: "Email Adresini Doğrula (Yeniden)",
+      html: verifyEmailTemplate(rawToken),
+    });
   }
+  return { message: "Eğer bu email kayıtlı ve doğrulanmamışsa yeni link gönderildi." };
+},
 };

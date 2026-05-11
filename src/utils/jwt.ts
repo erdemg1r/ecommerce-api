@@ -24,11 +24,11 @@ export const signRefreshToken = (payload: RefreshTokenPayload) => {
     const options: SignOptions = {
         expiresIn: env.JWT_REFRESH_EXPIRES_IN as ExpiresIn,
     }
-    return jwt.sign(payload, env.JWT_REFRESH_SECRET, options)
+    return jwt.sign(payload, env.JWT_REFRESH_EXPIRES_IN, options)
 }
 
 export const verifyRefreshToken = (token: string) => {
-    return jwt.verify(token, env.JWT_REFRESH_SECRET) as RefreshTokenPayload
+    return jwt.verify(token, env.JWT_REFRESH_EXPIRES_IN) as RefreshTokenPayload
 }
 
 export const safeVerifyRefreshToken = (token: string): RefreshTokenPayload | null => {
