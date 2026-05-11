@@ -3,10 +3,11 @@ import { validateBody, validateQuery } from "../middlewares/validate.js";
 import { forgotPasswordSchema, loginSchema, registerSchema, resendVerificationSchema, resetPasswordSchme, verifyEmailSchema } from "../schemas/authSchemas.js";
 import { authController } from "../controllers/authController.js";
 import { authenticate } from "../middlewares/authenticate.js";
+import { forgotPasswordLimiter, loginRateLimiter, registerLimiter } from "../middlewares/rateLimiters.js";
 
 const router: ExpressRouter = Router();
 
-router.post("/register", validateBody(registerSchema), authController.register);
+router.post("/register", registerLimiter, validateBody(registerSchema), authController.register);
 
 router.get(
   "/verify-email",
@@ -14,7 +15,7 @@ router.get(
   authController.verifyEmail,
 );
 
-router.post("/login", validateBody(loginSchema), authController.login)
+router.post("/login", loginRateLimiter,  validateBody(loginSchema), authController.login)
 
 router.post("/refresh", authController.refresh)
 
@@ -26,7 +27,7 @@ router.post("/me", authenticate, authController.me)
 
 router.post("/session", authenticate, authController.session)
 
-router.post("/forgot-password", validateBody(forgotPasswordSchema), authController.forgotPassword)
+router.post("/forgot-password", forgotPasswordLimiter, validateBody(forgotPasswordSchema), authController.forgotPassword)
 
 router.post("/reset-password", validateBody(resetPasswordSchme), authController.resetPassword)
 

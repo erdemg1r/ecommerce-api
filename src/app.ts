@@ -4,22 +4,27 @@ import { requestLogger } from "./middlewares/requestLogger.js";
 import helmet from "helmet";
 import cors from "cors";
 import routes from "./routes/index.js";
-import { rateLimiter } from "./middlewares/rateLimiter.js";
 import { errorHandler } from "./middlewares/errorHandler.js";
 import { notFound } from "./middlewares/notFound.js";
 import cookieParser from "cookie-parser";
+import { apiLimiter } from "./middlewares/rateLimiters.js";
 
 const app = express();
 
-app.use(helmet()); //! 1. Sıra Güvenlik
+app.disable("x-powered-by")
+
+app.use(helmet({
+  ...(env.NODE_ENV !== "production" && { contentSecurityPolicy: false }),
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+})); //! 1. Sıra Güvenlik
 
 app.use(cors()); //! 2. Sıra Cors
 
-app.use(cookieParser()) //! 4. Cookie Parser
-app.use(express.json()); //! 3. Sıra Body Parsing
+app.use(cookieParser()) //! 3. Cookie Parser
 
+app.use(express.json()); //! 4. Sıra Body Parsing
 
-app.use(rateLimiter); //! 5. Sıra Rate Limiting
+app.use(apiLimiter)
 
 app.use(requestLogger); //! 6. Request Logging
 

@@ -28,7 +28,7 @@ const getById = asyncHandler(async (req: Request<{ id: string }>, res: Response)
 
 const create = asyncHandler(async (req: Request, res: Response) => {
   // req.body zaten doğrulanmış ve dönüştürülmüş — güvenle kullan
-  const product = await productService.create(req.body);
+  const product = await productService.create({ ...req.body, ownerId: req.user!.userId });
   sendSuccess(res, product, 201);
 });
 

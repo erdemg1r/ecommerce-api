@@ -6,3 +6,6 @@ dist/
 /src/generated/prisma
 
 ders_ecommerce-api/
+DEGISIKLIKLER.md
+AUTH_POSTMAN.md
+postman-auth-collection.json
