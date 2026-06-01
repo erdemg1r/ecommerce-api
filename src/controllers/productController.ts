@@ -4,10 +4,25 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { type ProductController } from "../types/controllerTypes.js";
 import type { ProductQuery } from "../schemas/productSchemas.js";
 import { sendSuccess, sendList, sendNoContent } from "../utils/response.js";
+import { ValidationError } from "../utils/errors.js";
+import { productImageService } from "../services/productImageService.js";
 
 const getAll = asyncHandler(async (_req: Request, res: Response) => {
+
+  const filters = res.locals.query as ProductQuery
+
+  if (filters.cursor !== undefined) {
+    const { data, meta } = await productService.findAllWithCursor(filters)
+
+    res.json({
+      success: true, data, meta
+    })
+    return;
+  }
+
+
   const { data, meta } = await productService.findAll(
-    res.locals.query as ProductQuery,
+    filters
   );
   sendList(res, data, {
     page: meta.page,
@@ -71,6 +86,59 @@ const setTags = asyncHandler(async (req: Request<{ id: string }>, res: Response)
   sendSuccess(res, product);
 });
 
+const uploadImage = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
+  if (!req.file) {
+    throw new ValidationError("Dosya Zorunlu", {
+      file: ["Image alanı bir dosya içermeli"]
+    })
+  }
+
+  const imageUrl = `/uploads/products/${req.file.filename}`
+  const product = await productService.setImage(req.params.id, imageUrl)
+  sendSuccess(res, product)
+
+})
+
+const uploadGallery = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
+  const files = req.files as Express.Multer.File[] | undefined
+
+  if (!files || files.length === 0) {
+    throw new ValidationError("En az 1 dosya zorunlu", {
+      iamges: ["images alanı en az 1 dosya içermeli"]
+    })
+  }
+
+  const created = await productImageService.addMany(req.params.id, files)
+  sendSuccess(res, created, 201)
+})
+
+const removeImage = asyncHandler(async (req: Request<{ id: string, imageId: string }>, res: Response) => {
+  await productImageService.remove(req.params.id, req.params.imageId)
+
+  sendNoContent(res)
+
+})
+
+const search = asyncHandler(async (req: Request, res: Response) => {
+  const q = String(req.query["q"] ?? "").trim()
+  const page = Math.max(1, Number(req.query["page"] ?? 1));
+  const limit = Math.min(100, Math.max(1, Number(req.query["limit"] ?? 20)));
+
+  if (q.length < 2) {
+    throw new ValidationError("Arama sorgusu en az 2 karakter olmalı", {
+      q: ["q parametresi zorunlu, minimum 2 karakter"]
+    })
+  }
+
+  const { data, total } = await productService.search(q, page, limit)
+
+  sendList(res, data, { page, limit, total })
+
+
+
+})
+
+
 export const productController: ProductController = {
   getAll,
   getDeleted,
@@ -82,4 +150,8 @@ export const productController: ProductController = {
   addTags,
   removeTags,
   setTags,
+  uploadImage,
+  uploadGallery,
+  removeImage,
+  search
 };

@@ -8,6 +8,7 @@ import { errorHandler } from "./middlewares/errorHandler.js";
 import { notFound } from "./middlewares/notFound.js";
 import cookieParser from "cookie-parser";
 import { apiLimiter } from "./middlewares/rateLimiters.js";
+import path from "node:path";
 
 const app = express();
 
@@ -20,13 +21,19 @@ app.use(helmet({
 
 app.use(cors()); //! 2. Sıra Cors
 
-app.use(cookieParser()) //! 3. Cookie Parser
+app.use(express.json()); //! 3. Sıra Body Parsing
 
-app.use(express.json()); //! 4. Sıra Body Parsing
+app.use(cookieParser()) //! 4. Cookie Parser
 
-app.use(apiLimiter)
+app.use("/uploads", express.static(path.resolve("uploads"), {
+  index: false,
+  maxAge: "1d"
+})) //! 5. Static files
 
-app.use(requestLogger); //! 6. Request Logging
+
+app.use(apiLimiter) //! 6. Rate Limit
+
+app.use(requestLogger); //! 7. Request Logging
 
 app.get("/health", (req, res) => {
   res.json({

@@ -1,4 +1,4 @@
-import { ConflictError, NotFoundError } from "../utils/errors.js";
+import { ConflictError, NotFoundError, ValidationError } from "../utils/errors.js";
 import { Prisma } from "../generated/prisma/client.js";
 import { prisma } from "../config/database.js";
 import type {
@@ -6,35 +6,68 @@ import type {
   UpdateProductInput,
   ProductQuery,
 } from "../schemas/productSchemas.js";
+import path from "node:path";
+import fs from "node:fs/promises";
+import { decodeCursor, encodeCursor } from "../utils/cursor.js";
+
+type SearchProduct = {
+  id: string;
+  name: string;
+  description: string | null;
+  price: number;
+  imageUrl: string | null;
+  rank: number;
+};
+
+function buildProductWhere(
+  filters: ProductQuery,
+): Prisma.ProductWhereInput {
+  const where: Prisma.ProductWhereInput = {
+    isActive: true,
+    deletedAt: null,
+  }
+
+  if (filters.categoryId) {
+    where.categoryId = filters.categoryId;
+  }
+
+  if (filters.producerId) {
+    where.producerId = filters.producerId;
+  }
+
+  if (filters.tagIds && filters.tagIds.length > 0) {
+    where.tags = { some: { id: { in: filters.tagIds } } }
+  }
+
+  if (filters.search) {
+    where.OR = [
+      {
+        name: { contains: filters.search, mode: "insensitive" }
+      },
+      {
+        description: { contains: filters.search, mode: "insensitive" }
+      }
+    ]
+  }
+
+  const minPrice = filters.minPrice
+  const maxPrice = filters.maxPrice
+
+  if (minPrice !== undefined || maxPrice !== undefined) {
+    where.price = {
+      ...(filters.minPrice !== undefined && { gte: filters.minPrice }),
+      ...(filters.maxPrice !== undefined && { lte: filters.maxPrice }),
+    };
+  }
+
+  return where;
+
+
+}
 
 export const productService = {
   findAll: async (filters: ProductQuery) => {
-    const where: Prisma.ProductWhereInput = {
-      isActive: true,
-      deletedAt: null,
-    };
-
-    if (filters.categoryId) {
-      where.categoryId = filters.categoryId;
-    }
-
-    if (filters.producerId) {
-      where.producerId = filters.producerId;
-    }
-
-    if (filters.search) {
-      where.name = {
-        contains: filters.search,
-        mode: "insensitive",
-      };
-    }
-
-    if (filters.minPrice !== undefined || filters.maxPrice !== undefined) {
-      where.price = {
-        ...(filters.minPrice !== undefined && { gte: filters.minPrice }),
-        ...(filters.maxPrice !== undefined && { lte: filters.maxPrice }),
-      };
-    }
+    const where = buildProductWhere(filters)
 
     const total = await prisma.product.count({ where });
     const data = await prisma.product.findMany({
@@ -42,8 +75,10 @@ export const productService = {
       select: {
         id: true,
         name: true,
+        description: true,
         price: true,
         stock: true,
+        imageUrl: true,
         isActive: true,
         createdAt: true,
         category: {
@@ -76,6 +111,65 @@ export const productService = {
     };
   },
 
+  findAllWithCursor: async (filters: ProductQuery) => {
+    const where = buildProductWhere(filters)
+    const limit = filters.limit
+
+    if (filters.cursor) {
+      const decode = decodeCursor(filters.cursor)
+      if (!decode) {
+        throw new ValidationError("Geçersiz Cursor", {
+          cursor: ["cursor parametresi zorunludur"]
+        })
+      }
+
+      where.OR = [
+        { createdAt: { lt: new Date(decode.createdAt) } },
+        {
+          createdAt: new Date(decode.createdAt),
+          id: { lt: decode.id }
+        }
+      ]
+
+    }
+    const rows = await prisma.product.findMany({
+      where,
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        price: true,
+        stock: true,
+        imageUrl: true,
+        createdAt: true,
+        category: { select: { id: true, name: true } },
+        producer: { select: { id: true, name: true } },
+        tags: {
+          where: { deletedAt: null },
+          select: { id: true, name: true },
+        },
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: limit + 1,
+    });
+
+    const hasMore = rows.length > limit
+    const data = hasMore ? rows.slice(0, limit) : rows
+    const last = data[data.length - 1]
+
+    const nextCursor = hasMore && last ? encodeCursor({
+      createdAt: last.createdAt.toISOString(),
+      id: last.id
+    }) : null
+
+    return {
+      data, meta: {
+        limit, nextCursor, hasMore
+      }
+    }
+
+  },
+
   findById: async (id: string) => {
     const product = await prisma.product.findUnique({
       where: { id, deletedAt: null },
@@ -83,6 +177,10 @@ export const productService = {
         category: true,
         producer: true,
         tags: { where: { deletedAt: null } },
+        images: {
+          orderBy: { sortOrder: "asc" },
+          select: { id: true, url: true, sortOrder: true }
+        }
       },
     });
     if (!product) throw new NotFoundError("Ürün");
@@ -211,4 +309,70 @@ export const productService = {
       orderBy: { deletedAt: "desc" },
     });
   },
+
+  setImage: async (id: string, imageUrl: string) => {
+
+    const existing = await prisma.product.findUnique({
+      where: { id },
+      select: { imageUrl: true },
+    });
+
+    const updated = await prisma.product.update({
+      where: { id },
+      data: { imageUrl },
+      select: {
+        id: true,
+        name: true,
+        imageUrl: true,
+        updatedAt: true
+      }
+    })
+
+    if (existing?.imageUrl && existing.imageUrl !== imageUrl) {
+      const oldPath = path.resolve(`.${existing.imageUrl}`);
+      await fs.unlink(oldPath).catch(() => {
+        // Dosya zaten yoksa veya silinememişse sessiz geç —
+        // DB tutarlı, disk best-effort
+      });
+    }
+
+    return updated;
+  },
+
+  search: async (q: string, page: number, limit: number): Promise<{ data: SearchProduct[]; total: number }> => {
+    const offset = (page - 1) * limit;
+
+    const rows = await prisma.$queryRaw<SearchProduct[]>(Prisma.sql`
+    SELECT
+      "id",
+      "name",
+      "description",
+      "price",
+      "imageUrl",
+      ts_rank("searchVector", websearch_to_tsquery('turkish_unaccent', ${q})) AS "rank"
+    FROM "products"
+    WHERE "deletedAt" IS NULL
+      AND "isActive" = true
+      AND "searchVector" @@ websearch_to_tsquery('turkish_unaccent', ${q})
+    ORDER BY "rank" DESC, "createdAt" DESC
+    LIMIT ${limit} OFFSET ${offset}
+  `);
+
+    const totalResult = await prisma.$queryRaw<{ count: bigint }[]>(Prisma.sql`
+    SELECT COUNT(*)::bigint AS count
+    FROM "products"
+    WHERE "deletedAt" IS NULL
+      AND "isActive" = true
+      AND "searchVector" @@ websearch_to_tsquery('turkish_unaccent', ${q})
+  `);
+
+    return {
+      data: rows,
+      total: Number(totalResult[0]?.count ?? 0)
+    }
+
+
+  }
+
+
 };

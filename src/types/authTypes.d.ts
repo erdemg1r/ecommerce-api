@@ -1,0 +1,20 @@
+import type { Role } from "../generated/prisma/client.js";
+export interface AccessTokenPayload {
+    userId: string;
+    role: Role;
+}
+export interface RefreshTokenPayload {
+    userId: string;
+    tokenId: string;
+}
+export interface SessionContext {
+    userAgent?: string | undefined;
+    ipAddress?: string | undefined;
+}
+export interface MailOptions {
+    to: string;
+    subject: string;
+    html: string;
+    text?: string;
+}
+//# sourceMappingURL=authTypes.d.ts.map

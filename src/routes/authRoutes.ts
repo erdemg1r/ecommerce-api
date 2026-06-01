@@ -15,7 +15,7 @@ router.get(
   authController.verifyEmail,
 );
 
-router.post("/login", loginRateLimiter,  validateBody(loginSchema), authController.login)
+router.post("/login", loginRateLimiter, validateBody(loginSchema), authController.login)
 
 router.post("/refresh", authController.refresh)
 
@@ -36,6 +36,10 @@ router.post(
   validateBody(resendVerificationSchema),
   authController.resendVerification,
 );
+
+router.get("/google", authController.googleRedirect)
+
+router.get("/google/callback", authController.googleCallBack)
 
 
 export default router;

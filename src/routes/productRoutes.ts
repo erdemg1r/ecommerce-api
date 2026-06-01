@@ -11,15 +11,19 @@ import {
   productQuerySchema,
   tagIdsSchema,
 } from "../schemas/productSchemas.js";
-import { idParamSchema } from "../schemas/commonSchemas.js";
+import { idAndImageIdParamSchema, idParamSchema } from "../schemas/commonSchemas.js";
 import { authenticate } from "../middlewares/authenticate.js";
 import { authorize } from "../middlewares/authorize.js";
 import { checkOwnership } from "../middlewares/checkOwnerShip.js";
+import { uploadProductImage } from "../middlewares/upload.js";
 
 const router: ExpressRouter = Router();
 
 // 1. Statik koleksiyon route'ları (dinamik /:id'den ÖNCE gelmeli)
 router.get("/", validateQuery(productQuerySchema), productController.getAll);
+
+router.get("/search", productController.search)
+
 router.get("/deleted", authenticate, authorize("ADMIN"), productController.getDeleted);
 
 // 2. Kaynak yaratma
@@ -65,5 +69,11 @@ router.put(
   validateBody(tagIdsSchema),
   productController.setTags,
 );
+
+router.post("/:id/image", authenticate, authorize("ADMIN", "PRODUCER"), checkOwnership("product"), validateParams(idParamSchema), uploadProductImage.single("image"), productController.uploadImage)
+
+router.post("/:id/images", authenticate, authorize("ADMIN", "PRODUCER"), checkOwnership("product"), validateParams(idParamSchema), uploadProductImage.array("image", 5), productController.uploadGallery)
+
+router.delete("/:id/images/:imageId", authenticate, authorize("ADMIN", "PRODUCER"), checkOwnership("product"), validateParams(idAndImageIdParamSchema), productController.removeImage)
 
 export default router;

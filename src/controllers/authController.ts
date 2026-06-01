@@ -6,6 +6,13 @@ import type { ResendVerificationInput, VerifyEmailInput } from "../schemas/authS
 import type { AuthController } from "../types/controllerTypes.js";
 import { clearRefreshCookie, COOKIE_NAME, setRefreshCookie } from "../utils/cookies.js";
 import { UnauthorizedError } from "../utils/errors.js";
+import { generateCodeVerifier, generateState, OAuth2RequestError } from "arctic";
+import { env } from "../config/env.js";
+import { GOOGLE_USERINFO_URL, googleClient, type GoogleUserInfo } from "../utils/oauth.js";
+
+const GOOGLE_STATE_COOKIE = "google_oauth_state";
+const GOOGLE_VERIFIER_COOKIE = "google_oauth_code_verifier";
+const OAUTH_COOKIE_TTL_MS = 10 * 60 * 1000;
 
 const register = asyncHandler(async (req: Request, res: Response) => {
   const user = await authService.register(req.body);
@@ -86,6 +93,98 @@ const resendVerification = asyncHandler(async (req: Request, res: Response) => {
   sendSuccess(res, result);
 });
 
+const googleRedirect = asyncHandler(async (_req: Request, res: Response) => {
+  const state = generateState()
+  const codeVerifier = generateCodeVerifier()
+
+  res.cookie(GOOGLE_STATE_COOKIE, state, {
+    httpOnly: true,
+    secure: env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: OAUTH_COOKIE_TTL_MS,
+    path: "/"
+  })
+
+  res.cookie(GOOGLE_VERIFIER_COOKIE, codeVerifier, {
+    httpOnly: true,
+    secure: env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: OAUTH_COOKIE_TTL_MS,
+    path: "/"
+  })
+
+  const url = googleClient.createAuthorizationURL(state, codeVerifier, [
+    "openid",
+    "profile",
+    "email"
+  ])
+
+  res.redirect(url.toString())
+
+})
+
+const googleCallBack = asyncHandler(async (req: Request, res: Response) => {
+  const code = req.query["code"] as string | undefined
+  const state = req.query["state"] as string | undefined
+  const storedState = req.cookies?.[GOOGLE_STATE_COOKIE] as string | undefined
+  const storedCodeVerifier = req.cookies?.[GOOGLE_VERIFIER_COOKIE] as string | undefined
+
+  if (!code || !state || !storedState || state !== storedState || !storedCodeVerifier) {
+    res.clearCookie(GOOGLE_STATE_COOKIE, { path: "/" })
+    res.clearCookie(GOOGLE_VERIFIER_COOKIE, { path: "/" })
+    return res.redirect(`${env.OAUTH_ERROR_REDIRECT}?reason=invalid_state`)
+  }
+
+  try {
+    const tokens = await googleClient.validateAuthorizationCode(code, storedCodeVerifier)
+
+    const accessToken = tokens.accessToken()
+
+    const userinfoResponse = await fetch(GOOGLE_USERINFO_URL, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      }
+    })
+
+    if (!userinfoResponse.ok) {
+      res.clearCookie(GOOGLE_STATE_COOKIE, { path: "/" })
+      res.clearCookie(GOOGLE_VERIFIER_COOKIE, { path: "/" })
+      return res.redirect(`${env.OAUTH_ERROR_REDIRECT}?reason=userinfo_failed`)
+    }
+
+    const googleUser = (await userinfoResponse.json() as GoogleUserInfo)
+
+    const result = await authService.handleOAuthLogin(
+      {
+        provider: "GOOGLE",
+        providerUserId: googleUser.sub,
+        email: googleUser.email,
+        name: googleUser.name,
+        emailVerified: googleUser.email_verified
+      },
+      {
+        userAgent: req.get("user-agent") ?? undefined,
+        ipAddress: req.ip
+      }
+    )
+
+    res.clearCookie(GOOGLE_STATE_COOKIE, { path: "/" })
+    res.clearCookie(GOOGLE_VERIFIER_COOKIE, { path: "/" })
+
+    setRefreshCookie(res, result.refreshToken)
+
+    return res.redirect(`${env.OAUTH_SUCCESS_REDIRECT}?token=${result.accessToken}`)
+  } catch (err) {
+    if (err instanceof OAuth2RequestError) {
+      res.clearCookie(GOOGLE_STATE_COOKIE, { path: "/" })
+      res.clearCookie(GOOGLE_VERIFIER_COOKIE, { path: "/" })
+      return res.redirect(`${env.OAUTH_ERROR_REDIRECT}?reason=oauth_denied`)
+    }
+    throw err
+  }
+
+})
+
 export const authController: AuthController = {
   register,
   verifyEmail,
@@ -97,5 +196,7 @@ export const authController: AuthController = {
   session,
   forgotPassword,
   resetPassword,
-  resendVerification
+  resendVerification,
+  googleCallBack,
+  googleRedirect,
 }

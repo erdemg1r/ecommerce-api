@@ -14,6 +14,10 @@ export interface ProductController extends CrudController {
   addTags: RequestHandler;
   removeTags: RequestHandler;
   setTags: RequestHandler;
+  uploadImage:RequestHandler;
+  uploadGallery:RequestHandler;
+  removeImage:RequestHandler;
+  search:RequestHandler;
 }
 
 export interface AuthController {
@@ -28,4 +32,19 @@ export interface AuthController {
   forgotPassword: RequestHandler,
   resetPassword: RequestHandler,
   resendVerification: RequestHandler,
+  googleCallBack: RequestHandler,
+  googleRedirect: RequestHandler,
+}
+
+export interface ReviewController {
+  list: RequestHandler;
+  stats: RequestHandler;
+  upsert: RequestHandler;
+  remove: RequestHandler;
+}
+
+export interface WishlistController {
+  list: RequestHandler;
+  add: RequestHandler;
+  remove: RequestHandler;
 }

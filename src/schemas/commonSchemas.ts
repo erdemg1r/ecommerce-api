@@ -37,3 +37,14 @@ export const slugSchema = z
     "Slug sadece küçük harf, rakam ve tire içermeli",
   )
   .optional();
+
+
+export const idAndImageIdParamSchema = z.object({
+  id: z.string().uuid("Geçersiz ürün ID formatı"),
+  imageId: z.string().uuid("Geçersiz görsel ID formatı"),
+})
+
+export const cursorPaginationSchema = z.object({
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(20)
+})

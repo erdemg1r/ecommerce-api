@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 import { prisma } from "../config/database.js";
-import type { Role } from "../generated/prisma/client.js";
+import type { Provider, Role } from "../generated/prisma/client.js";
 import type { ForgotPasswordInput, LoginInput, RegisterInput, ResetPasswordInput } from "../schemas/authSchemas.js";
 import type { RefreshTokenPayload, SessionContext } from "../types/authTypes.js";
 import { ConflictError, UnauthorizedError } from "../utils/errors.js";
@@ -342,25 +342,112 @@ export const authService = {
   },
 
   resendVerification: async (email: string) => {
-  const user = await prisma.user.findUnique({ where: { email } });
-  if (user && !user.isVerified && !user.deletedAt) {
-    const rawToken = crypto.randomBytes(32).toString("hex");
-    const hashedToken = crypto.createHash("sha256").update(rawToken).digest("hex");
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (user && !user.isVerified && !user.deletedAt) {
+      const rawToken = crypto.randomBytes(32).toString("hex");
+      const hashedToken = crypto.createHash("sha256").update(rawToken).digest("hex");
 
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        verificationToken: hashedToken,
-        verificationTokenExpiry: new Date(Date.now() + VERIFICATION_TOKEN_TTL_MS),
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          verificationToken: hashedToken,
+          verificationTokenExpiry: new Date(Date.now() + VERIFICATION_TOKEN_TTL_MS),
+        },
+      });
+
+      await safeSendEmail({
+        to: user.email,
+        subject: "Email Adresini Doğrula (Yeniden)",
+        html: verifyEmailTemplate(rawToken),
+      });
+    }
+    return { message: "Eğer bu email kayıtlı ve doğrulanmamışsa yeni link gönderildi." };
+  },
+
+
+  handleOAuthLogin: async (
+    input: {
+      provider: Provider,
+      providerUserId: string,
+      email: string,
+      name: string,
+      emailVerified: boolean
+    },
+    session: SessionContext,
+  ) => {
+    const { provider, providerUserId, email, name, emailVerified } = input
+
+    const existingOAuthAccount = await prisma.oAuthAccount.findUnique({
+      where: {
+        provider_providerUserId: { provider, providerUserId }
       },
-    });
+      include: { user: true }
+    })
 
-    await safeSendEmail({
-      to: user.email,
-      subject: "Email Adresini Doğrula (Yeniden)",
-      html: verifyEmailTemplate(rawToken),
-    });
+    let user: { id: string, email: string, name: string, role: Role }
+
+    if (existingOAuthAccount) {
+
+      //1. Durum 
+      const u = existingOAuthAccount.user
+
+      if (u.deletedAt || !u.isActive) {
+        throw new UnauthorizedError("Hesap Erişime kapalı.")
+      }
+      user = { id: u.id, email: u.email, name: u.name, role: u.role }
+    } else {
+
+      //2. Durum
+
+      const existingUser = await prisma.user.findUnique({
+        where: {
+          email
+        }
+      })
+
+      if (existingUser) {
+        if (existingUser.deletedAt || !existingUser.isActive) {
+          throw new UnauthorizedError("Hesap Erişime kapalı.")
+        }
+        await prisma.oAuthAccount.create({
+          data: {
+            userId: existingUser.id, provider, providerUserId, email
+          }
+        })
+        user = {
+          id: existingUser.id,
+          email: existingUser.email,
+          name: existingUser.name,
+          role: existingUser.role
+        }
+      } else {
+
+        //3. Durum
+        const created = await prisma.user.create({
+          data: {
+            email,
+            name,
+            password: null,
+            isVerified: emailVerified,
+            oauthAccounts: {
+              create: {
+                provider, providerUserId, email
+              }
+            }
+          },
+          select: {
+            id: true, email: true, name: true, role: true
+          }
+        })
+        user = created
+      }
+    }
+    const tokens = await issueTokens(
+      {
+        id: user.id, role: user.role
+      },
+      session
+    )
+    return { user, ...tokens }
   }
-  return { message: "Eğer bu email kayıtlı ve doğrulanmamışsa yeni link gönderildi." };
-},
 };

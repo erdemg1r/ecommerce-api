@@ -21,9 +21,12 @@ export function sendList<T>(
   const body: SuccessResponse<T[]> = { success: true, data };
 
   if (meta) {
+    const totalPages = Math.ceil(meta.total / meta.limit);
     body.meta = {
       ...meta,
-      totalPages: Math.ceil(meta.total / meta.limit),
+      totalPages,
+      hasNext: meta.page < totalPages,
+      hasPrev: meta.page > 1,
     };
   }
 

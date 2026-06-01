@@ -18,6 +18,19 @@ const envSchema = z.object({
   SMTP_FROM: z.string().default("E-Ticaret API <noreply@ecommerce.local>"),
   // Verify/reset linklerinde kullanılır
   FRONTEND_URL: z.string().url().default("http://localhost:3000"),
+
+  GOOGLE_OAUTH_CLIENT_ID: z.string(),
+  GOOGLE_OAUTH_CLIENT_SECRET: z.string(),
+  GOOGLE_OAUTH_REDIRECT_URL: z.string().url(),
+
+  OAUTH_SUCCESS_REDIRECT: z.string().url(),
+  OAUTH_ERROR_REDIRECT: z.string().url(),
+
+  UPLOAD_MAX_SIZE_MB: z.coerce.number().int().positive().default(5),
+  UPLOAD_ALLOWED_TYPES: z
+    .string()
+    .default("image/jpeg,image/png,image/webp")
+    .transform((s) => s.split(",").map((t) => t.trim())),
 });
 
 const sonuc = envSchema.safeParse(process.env);

@@ -1,0 +1,16 @@
+import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient } from "../generated/prisma/client.js";
+import { env } from "./env.js";
+const globalForPrisma = globalThis;
+const adapter = new PrismaPg({
+    connectionString: env.DATABASE_URL,
+});
+export const prisma = globalForPrisma.prisma ??
+    new PrismaClient({
+        adapter,
+        log: ["query", "info", "warn", "error"], // Geliştirme sırasında sorguları görmek için "query" ekleyelim
+    });
+if (process.env.NODE_ENV !== "production") {
+    globalForPrisma.prisma = prisma;
+}
+//# sourceMappingURL=database.js.map

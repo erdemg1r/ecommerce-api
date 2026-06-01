@@ -26,16 +26,28 @@ enum OrderStatus {
   CANCELLED
 }
 
+enum Provider {
+  GOOGLE
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+}
+
 model Product{
   id String @id @default(uuid())
   name String  @unique
   description String?
   price Int //Kuruş cinsinden
   stock Int @default(0) 
+  imageUrl  String?
   isActive Boolean @default(true)
   deletedAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  searchVector Unsupported("tsvector")? // SQL
 
   // ilişkiler
 
@@ -50,7 +62,17 @@ model Product{
 
   tags Tag[]
 
+  reviews Review[]
+
+  wishlist WishlistItem[]
+
+  images ProductImage[]
+
+  cartItems CartItem[]
+
   @@map("products")
+
+  @@index([searchVector], type:Gin)
   // @@unique()
   // @@index([name])
   // @@id([id,productId])
@@ -99,7 +121,7 @@ model User {
   id String @id @default(uuid())
   email String @unique
   name String
-  password String //bcrypt
+  password String? //bcrypt
   role Role @default(CUSTOMER)
   isActive Boolean @default(true)
   isVerified Boolean @default(false)
@@ -117,6 +139,16 @@ model User {
 
   // ilişkiler
   refreshTokens RefreshToken[]
+
+  oauthAccounts OAuthAccount[]
+
+  reviews Review[]
+
+  wishlist WishlistItem[]
+
+  addresses Address[]
+
+  carts Cart[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -141,4 +173,140 @@ model RefreshToken {
 
   @@map("refresh_tokens")
 
+}
+
+model OAuthAccount{
+  id String @id @default(uuid())
+  userId  String
+  provider Provider
+  providerUserId  String
+  email String
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references:[id], onDelete:Cascade)
+
+  @@unique([provider, providerUserId]) 
+  @@index([userId])
+  @@map("oauth_accounts")
+
+}
+
+model ProductImage {
+  id        String   @id @default(uuid())
+  productId String
+  url       String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@map("product_images")
+}
+
+model Review {
+  id        String    @id @default(uuid())
+  userId    String
+  productId String
+  rating    Int       // 1-5
+  comment   String?
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@index([productId])
+  @@map("reviews")
+}
+
+model WishlistItem {
+  id        String   @id @default(uuid())
+  userId    String
+  productId String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@index([userId])
+  @@map("wishlist_items")
+}
+
+// Enes
+model Address {
+  id String @id @default(uuid())
+  userId String
+  title String
+  fullName String // teslimatı alacak kişinin adı
+  phone String
+  city String
+  district String
+  fullAddress String
+  isDefault Boolean @default(false)
+  deletedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("addresses")
+}
+
+// Sinan
+model Cart {
+  id String @id @default(uuid())
+  userId String @unique
+  couponId String?
+  items CartItem[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  coupon Coupon? @relation(fields: [couponId], references: [id], onDelete: SetNull)
+
+
+  @@index([userId])
+  @@map("carts")
+}
+
+// Sinan
+model CartItem {
+  id String @id @default(uuid())
+  cartId String
+  productId String
+  quantity Int @default(1)
+  price Int //Kuruş cinsinden, eklenme anındaki fiyat
+  createdAt DateTime @default(now())
+
+  cart Cart @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([cartId])
+  @@index([productId])
+  @@map("cart_items")
+}
+
+// Erdem
+model Coupon {
+  id String @id @default(uuid())
+  code String @unique // "BAYRAM25"
+  discountType DiscountType
+  discountValue Int // percentage için 1-100, fixed için kuruş cinsinden
+  minOrderAmount Int 
+  maxUsage Int? // null ise sınırsız
+  expiresAt DateTime? // null ise süresiz
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+
+  carts Cart[]
+
+  @@map("coupons")
 }

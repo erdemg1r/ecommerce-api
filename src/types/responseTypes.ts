@@ -6,10 +6,18 @@ export interface PaginationMetaInput {
 
 export interface ListMeta extends PaginationMetaInput {
   totalPages: number;
+  hasNext: boolean;
+  hasPrev: boolean;
+}
+
+export interface CursorMeta {
+  limit: number;
+  nextCursor: string | null;
+  hasMore: boolean;
 }
 
 export interface SuccessResponse<T> {
   success: true;
   data: T;
-  meta?: ListMeta;
+  meta?: ListMeta | CursorMeta;
 }
