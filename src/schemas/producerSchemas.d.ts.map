@@ -1,1 +1,0 @@
-{"version":3,"file":"producerSchemas.d.ts","sourceRoot":"","sources":["producerSchemas.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,CAAC,EAAE,MAAM,QAAQ,CAAC;AAG3B,eAAO,MAAM,oBAAoB;;;iBAK/B,CAAC;AAEH,MAAM,MAAM,mBAAmB,GAAG,CAAC,CAAC,KAAK,CAAC,OAAO,oBAAoB,CAAC,CAAC;AAEvE,eAAO,MAAM,oBAAoB;;;iBAAiC,CAAC;AAEnE,MAAM,MAAM,mBAAmB,GAAG,CAAC,CAAC,KAAK,CAAC,OAAO,oBAAoB,CAAC,CAAC"}

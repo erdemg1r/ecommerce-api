@@ -48,3 +48,13 @@ export interface WishlistController {
   add: RequestHandler;
   remove: RequestHandler;
 }
+
+export interface CouponController {
+  getAll: RequestHandler;
+  getById: RequestHandler;
+  getByCode: RequestHandler;
+  create: RequestHandler;
+  update: RequestHandler;
+  remove: RequestHandler;
+  validate: RequestHandler;
+}

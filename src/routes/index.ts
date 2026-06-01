@@ -6,6 +6,7 @@ import tagsRoutes from "./tagRoutes.js";
 import authRoutes from "./authRoutes.js";
 import reviewRoutes from "./reviewRoutes.js";
 import wishlistRoutes from "./wishlistRoutes.js";
+import couponRoutes from "./couponRoutes.js";
 
 const router: ExpressRouter = Router();
 
@@ -23,4 +24,7 @@ router.use("/reviews", reviewRoutes);
 
 router.use("/wishlists", wishlistRoutes);
 
+router.use("/coupons", couponRoutes);
+
 export default router;
+
